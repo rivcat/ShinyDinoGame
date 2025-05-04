@@ -1,0 +1,144 @@
+library(shiny) 
+
+install.packages("shinyjs")
+
+library(shinyjs)
+
+ui <- fluidPage(
+  useShinyjs(),
+  tags$head(
+    tags$style(HTML("
+      #dino {
+        width: 40px;
+        height: 40px;
+        position: absolute;
+        bottom: 0;
+        left: 50px;
+      }
+      #cactus {
+        width: 20px;
+        height: 40px;
+        position: absolute;
+        bottom: 0;
+        right: 0;
+      }
+      #gameArea {
+        position: relative;
+        width: 800px;
+        height: 200px;
+        border: 2px solid #444;
+        background-color: #fff;
+        margin: 0 auto;
+        overflow: hidden;
+      }
+      #scoreDisplay {
+        text-align: center;
+        font-size: 20px;
+        font-weight: bold;
+        margin-top: 10px;
+      }
+    "))
+  ),
+  tags$h2("Shiny Dino Game with Images, Spacebar & Sound"),
+  actionButton("reset", "Reset"),
+  tags$div(id = "scoreDisplay", "Score: 0"),
+  tags$div(id = "gameArea",
+           tags$div(id = "dino", tags$img(src = "dino.png", width = "40", height = "40")),
+           tags$div(id = "cactus", tags$img(src = "cactus.png", width = "20", height = "40"))
+  ),
+  tags$audio(id = "jumpSound", src = "jump.mp3", type = "audio/mp3"),
+  tags$script(HTML("
+    let dino = document.getElementById('dino');
+    let cactus = document.getElementById('cactus');
+    let jumpSound = document.getElementById('jumpSound');
+    let score = 0;
+    let gameOver = false;
+    let jumping = false;
+    let intervalCactus;
+
+    function jump() {
+      if (jumping || gameOver) return;
+      jumping = true;
+      jumpSound.play();
+      let up = 0;
+      let interval = setInterval(() => {
+        if (up >= 100) {
+          clearInterval(interval);
+          let down = setInterval(() => {
+            if (up <= 0) {
+              clearInterval(down);
+              jumping = false;
+            } else {
+              up -= 5;
+              dino.style.bottom = up + 'px';
+            }
+          }, 20);
+        } else {
+          up += 5;
+          dino.style.bottom = up + 'px';
+        }
+      }, 20);
+    }
+
+    function detectCollision() {
+      let dinoRect = dino.getBoundingClientRect();
+      let cactusRect = cactus.getBoundingClientRect();
+      return (
+        dinoRect.right > cactusRect.left &&
+        dinoRect.left < cactusRect.right &&
+        dinoRect.bottom > cactusRect.top
+      );
+    }
+
+    function moveCactus() {
+      let pos = 800;
+      score = 0;
+      intervalCactus = setInterval(() => {
+        if (gameOver) return;
+        if (pos < -20) {
+          pos = 800;
+          score++;
+          Shiny.setInputValue('score', score);
+        } else {
+          pos -= 5;
+          cactus.style.right = (800 - pos) + 'px';
+        }
+        if (detectCollision()) {
+          gameOver = true;
+          clearInterval(intervalCactus);
+          Shiny.setInputValue('game_over', true);
+        }
+      }, 30);
+    }
+
+    document.addEventListener('keydown', function(e) {
+      if (e.code === 'Space') {
+        e.preventDefault();
+        jump();
+      }
+    });
+
+    document.getElementById('reset').onclick = () => {
+      gameOver = false;
+      cactus.style.right = '0px';
+      dino.style.bottom = '0px';
+      moveCactus();
+      Shiny.setInputValue('score', 0);
+      document.getElementById('scoreDisplay').innerText = 'Score: 0';
+    };
+
+    moveCactus();
+  "))
+)
+
+server <- function(input, output, session) {
+  observeEvent(input$score, {
+    runjs(sprintf("document.getElementById('scoreDisplay').innerText = 'Score: %s';", input$score))
+  })
+  
+  observeEvent(input$game_over, {
+    runjs("document.getElementById('scoreDisplay').innerText += ' — GAME OVER! 😵';")
+  })
+}
+
+shinyApp(ui, server)
